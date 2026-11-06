@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hayes Signal Monitor</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --txt:#e8eaed; --mut:#8b93a1; --bd:#272b35; --up:#3ddc97; --dn:#ff6b6b; --ac:#6ea8fe; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f5f6f8; --card:#fff; --txt:#16181d; --mut:#5d6573; --bd:#dfe2e8; --up:#0a8f5b; --dn:#c62f2f; --ac:#1f5fd1; } }
+  body { margin:0; padding:20px; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--txt); }
+  h1 { font-size:1.3rem; margin:0 0 4px; } h2 { font-size:1.05rem; margin:0 0 10px; }
+  .mut { color:var(--mut); font-size:.85rem; } .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; margin:16px 0; }
+  .wrap { overflow-x:auto; } table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--bd); font-size:.9rem; }
+  .bullish { color:var(--up); font-weight:600; } .bearish { color:var(--dn); font-weight:600; } .neutral { color:var(--mut); }
+  .chip { display:inline-block; border:1px solid var(--bd); border-radius:999px; padding:0 8px; margin:0 4px 4px 0; font-size:.75rem; color:var(--mut); }
+  .item { padding:10px 0; border-bottom:1px solid var(--bd); } .item:last-child { border-bottom:0; } a { color:var(--ac); }
+</style>
+</head>
+<body>
+<h1>Hayes Signal Monitor</h1>
+<div class="mut" id="status">Carregando…</div>
+<div class="card"><h2>Sinal por ativo (janela de 48 h, com decaimento)</h2><div class="wrap"><table id="signals"></table></div>
+<div class="mut">Heurística por palavras-chave. Use como uma variável do seu modelo, não como decisão. Não é recomendação financeira.</div></div>
+<div class="card"><h2>Últimas publicações</h2><div id="items"></div></div>
+<script>
+const $ = id => document.getElementById(id);
+function el(tag, props = {}, ...kids) { const e = document.createElement(tag); Object.assign(e, props); kids.flat().forEach(k => e.append(k)); return e; }
+function row(cells, head) { return el("tr", {}, cells.map(c => el(head ? "th" : "td", {}, c))); }
+async function load() {
+  try {
+    const [s, i] = await Promise.all([fetch("/api/signals").then(r => r.json()), fetch("/api/items?limit=30").then(r => r.json())]);
+    $("status").textContent = (s.persistent ? "Armazenamento persistente" : "Sem Redis configurado: dados em memória (não durável)") + " · atualiza a cada 30 s";
+    const t = $("signals"); t.replaceChildren(row(["Ativo", "Sinal", "Score", "Menções", "Última"], true));
+    Object.entries(s.signals).sort((a, b) => b[1].mentions - a[1].mentions).forEach(([a, v]) =>
+      t.append(row([a, el("span", {className: v.label, textContent: v.label}), String(v.score), String(v.mentions), new Date(v.last_mention).toLocaleString("pt-BR")])));
+    const box = $("items"); box.replaceChildren();
+    i.items.forEach(it => {
+      const d = el("div", {className: "item"});
+      d.append(el("div", {className: "mut", textContent: `${it.source} · ${new Date(it.published_at).toLocaleString("pt-BR")}`}));
+      const title = (it.title || it.text).slice(0, 220);
+      d.append(it.url.startsWith("https://") ? el("a", {href: it.url, target: "_blank", rel: "noopener noreferrer", textContent: title}) : document.createTextNode(title));
+      const chips = el("div");
+      Object.keys(it.analysis.assets).forEach(a => chips.append(el("span", {className: "chip", textContent: a})));
+      it.analysis.themes.forEach(a => chips.append(el("span", {className: "chip", textContent: "#" + a})));
+      chips.append(el("span", {className: "chip " + it.analysis.label, textContent: it.analysis.label}));
+      d.append(chips); box.append(d);
+    });
+    if (!i.items.length) box.append(el("div", {className: "mut", textContent: "Nenhum item ainda. Execute /api/poll."}));
+  } catch (e) { $("status").textContent = "Erro ao carregar dados"; }
+}
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>
