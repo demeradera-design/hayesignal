@@ -1,0 +1,15 @@
+name: Poll
+# Disparador gratuito a cada ~5 min (o cron do GitHub pode atrasar). No plano Pro da Vercel use crons nativos (ver README).
+on:
+  schedule: [{ cron: "*/5 * * * *" }]
+  workflow_dispatch:
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/poll
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          curl -fsS --max-time 30 -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/poll"
